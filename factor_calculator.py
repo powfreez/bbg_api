@@ -208,7 +208,7 @@ class FactorCalculator:
         # Calcul des rendements avec décalage
         momentum = price_data.pct_change(periods=lookback_period).shift(1)
 
-        momentum_filtered = momentum.where(momentum.abs() > 0.0001, np.nan)  # Seuil plus bas
+        momentum_filtered = momentum.where(momentum.abs() > 0.0001, np.nan)
 
         rolling_mean = momentum_filtered.rolling(window=36, min_periods=12).mean()
         rolling_std = momentum_filtered.rolling(window=36, min_periods=12).std()
