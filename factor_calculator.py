@@ -106,7 +106,7 @@ class FactorCalculator:
                 div_yield_clipped = self.clip_extreme_values(div_yield)
                 result_components['div_yield'] = div_yield_clipped
 
-        # Construction du composite avec standardisation
+        # Construction du composite et standardisation
         if result_components:
             standardized_components = {}
             for component, data in result_components.items():
@@ -201,7 +201,7 @@ class FactorCalculator:
 
         return book_to_market
 
-    def calculate_momentum_factor(self, lookback_period=3):
+    def calculate_momentum_factor(self, lookback_period=12):
 
         price_data = self.dataframes["PX_LAST"]
 

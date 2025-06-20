@@ -49,7 +49,7 @@ class PortExporterExcel:
                 if weight > 0:
                     # Créer une entrée pour ce ticker à cette date
                     row = {
-                        'PORTFOLIO NAME': f"Factor {strategy_type}_{optimization_method}",
+                        'PORTFOLIO NAME': f"Factor {strategy_type}",
                         'SECURITY_ID': ticker,
                         'Weight': weight,
                         'Date': date
@@ -60,7 +60,7 @@ class PortExporterExcel:
                     i_row += 1
 
         # Générer le nom du fichier
-        file_name = f"PORT_Factor {strategy_type}_{optimization_method}.xlsx"
+        file_name = f"PORT_Factor {strategy_type}.xlsx"
         file_path = os.path.join(self.output_directory, file_name)
 
         # Sauvegarder le DataFrame au format Excel

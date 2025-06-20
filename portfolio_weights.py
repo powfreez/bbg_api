@@ -214,7 +214,6 @@ class PortfolioWeighter:
             selected_tickers = scores_or_tickers
             weights = pd.Series(0.0, index=selected_tickers)
 
-        # Calculer la période de lookback
         lookback_start = current_date - pd.DateOffset(months=lookback_months)
 
         # Filtrer les données de prix pour la période de lookback
@@ -233,7 +232,7 @@ class PortfolioWeighter:
         available_tickers = price_subset.columns.tolist()
 
         if len(available_tickers) < 2:
-            # Pas assez de tickers avec des données suffisantes
+            # Pas assez de données
             weights[selected_tickers] = 1.0 / len(selected_tickers)
             return weights
 
@@ -245,7 +244,7 @@ class PortfolioWeighter:
             return weights
 
         # Calculer la matrice de covariance annualisée
-        cov_matrix = returns.cov() * 12  # Annualiser (données mensuelles)
+        cov_matrix = returns.cov() * 12
 
         # Vérifier que la matrice est définie positive
         eigenvals = np.linalg.eigvals(cov_matrix.values)

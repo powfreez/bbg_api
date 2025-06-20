@@ -48,7 +48,7 @@ def main():
         st.sidebar.text("Nombre d'actions: Non applicable pour la stratégie conditionnelle")
         top_n = None  # Valeur par défaut pour conditional
     else:
-        top_n = st.sidebar.slider("Nombre d'actions (top N)", 5, 50, 30)
+        top_n = st.sidebar.slider("Nombre d'actions (top N)", 5, 150, 30)
 
     # Dates
     start_date = st.sidebar.date_input("Date de début",
@@ -109,19 +109,12 @@ def main():
         st.sidebar.success(f"Volatilité cible: {target_volatility:.1%}")
     else:
         target_volatility = 0.15  # Valeur par défaut
-        volatility_lookback_months = 12  # Valeur par défaut
+        volatility_lookback_months = 6  # Valeur par défaut
 
-    # Allocation des facteurs (désactivé pour conditional)
-    st.sidebar.subheader("Allocation des facteurs")
-
-    if strategy_type == "conditional":
-        st.sidebar.info("L'allocation des facteurs n'est pas applicable pour la stratégie conditionnelle.")
-        # Valeurs par défaut pour conditional
-        value_weight = 0.33
-        momentum_weight = 0.33
-        profitability_weight = 0.34
-        can_run = True
-    else:
+    # Allocation des facteurs (masqué pour conditional)
+    if strategy_type != "conditional":
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Allocation des facteurs")
         st.sidebar.info("La somme des allocations doit être égale à 1.0")
 
         col1, col2, col3 = st.sidebar.columns(3)
@@ -142,6 +135,12 @@ def main():
         else:
             st.sidebar.success("Allocation valide!")
             can_run = True
+    else:
+        # Valeurs par défaut pour conditional (non utilisées)
+        value_weight = 0.33
+        momentum_weight = 0.33
+        profitability_weight = 0.34
+        can_run = True
 
     allocation_weights = {
         "value": value_weight,
@@ -274,7 +273,8 @@ def main():
         st.table(pd.DataFrame(vol_params))
 
     # Paramètres d'allocation - affichés uniquement pour unconditional
-    if strategy_type != "conditional":
+    if strategy_type == "unconditional":
+        st.subheader("Allocation des facteurs")
         allocation_params = {
             "Paramètre": ["Allocation: Value", "Allocation: Momentum", "Allocation: Profitability"],
             "Valeur": [f"{value_weight:.2f} ({value_weight * 100:.1f}%)",

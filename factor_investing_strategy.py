@@ -268,17 +268,9 @@ class FactorInvestingStrategy:
             strategy_params["Custom Profitability Components"] = prof_comp_str
 
         # Créer l'analyseur avec les paramètres
-        analyzer = PortfolioAnalysis(combined_returns, strategy_params=strategy_params)
+        analyzer = PortfolioAnalysis(combined_returns, strategy_params=strategy_params, weights_df=self.combined_weights)
         self.metrics = analyzer.calculate_metrics(annualization_factor=12)
 
-        print("\nPerformance du portefeuille combiné:")
-        print(f"Rendement cumulatif: {self.metrics['cumulative_return']:.2%}")
-        print(f"Rendement annualisé: {self.metrics['annualized_return']:.2%}")
-        print(f"Volatilité annualisée: {self.metrics['volatility']:.2%}")
-        if self.volatility_scaling:
-            print(f"Volatilité cible: {self.target_volatility:.1%}")
-        print(f"Ratio de Sharpe: {self.metrics['sharpe_ratio']:.2f}")
-        print(f"Drawdown maximum: {self.metrics['max_drawdown']:.2%}")
 
         report_file = analyzer.generate_quantstats_report(serie=self.combined_portfolio)
 

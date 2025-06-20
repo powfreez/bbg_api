@@ -76,7 +76,7 @@ class PortfolioConstructor:
     def construct_portfolio(self, factor, top_n=10,
                             weighting_method="equal", market_cap_data=None,
                             volatility_scaling=False, target_volatility=0.15,
-                            volatility_lookback_months=12):
+                            volatility_lookback_months=6):
 
         # Préparation des structures communes
         filtered_dates, rebalance_period, weights, previous_weights = self._prepare_portfolio_construction()
@@ -116,10 +116,16 @@ class PortfolioConstructor:
                                          previous_weights)
 
     def construct_conditional_portfolio(self, value_factor, momentum_factor, profitability_factor,
-                                         weighting_method="equal",
-                                        market_cap_data=None,
-                                        volatility_scaling=False, target_volatility=0.15,
-                                        volatility_lookback_months=12):
+                                                weighting_method="equal",
+                                                market_cap_data=None,
+                                                volatility_scaling=False, target_volatility=0.15,
+                                                volatility_lookback_months=12):
+        """
+        Implémentation de la méthodologie conditionnelle.
+
+        Cette version implémente des tris emboîtés avec construction de portfolios multiples
+        pour chaque combinaison Value/Momentum/Profitability avant agrégation finale.
+        """
         filtered_dates, rebalance_period, weights, previous_weights = self._prepare_portfolio_construction()
         portfolio_weights = {}
 
@@ -129,45 +135,114 @@ class PortfolioConstructor:
             momentum_scores = momentum_factor.loc[current_date][valid_tickers].dropna()
             profitability_scores = profitability_factor.loc[current_date][valid_tickers].dropna()
 
-            common_tickers = set(value_scores.index) & set(momentum_scores.index) & set(profitability_scores.index)
+            common_tickers = list(
+                set(value_scores.index) & set(momentum_scores.index) & set(profitability_scores.index))
 
-            # Seuils fixes 30%/40%/30%
-            high_threshold = int(len(common_tickers) * 0.3)
-            low_threshold = int(len(common_tickers) * 0.3)
+            if len(common_tickers) < 10:  # Minimum de titres requis
+                new_weights = pd.Series(0.0, index=self.price_data.columns)
+                portfolio_weights[current_date] = new_weights
+                continue
 
-            # Sélection des titres
-            value_buy = set(value_scores.nlargest(high_threshold).index)
-            # Sell non utilisé, reste d'une idée de long short non aboutie
-            value_sell = set(value_scores.nsmallest(low_threshold).index)
+            # Étape 1: Tri initial sur Value
+            n_tickers = len(common_tickers)
+            value_high_n = int(n_tickers * 0.3)
+            value_low_n = int(n_tickers * 0.3)
 
-            # idem momentum buy
-            momentum_buy = set(momentum_scores.nlargest(high_threshold).index)
-            momentum_sell = set(momentum_scores.nsmallest(low_threshold).index)
+            value_sorted = value_scores[common_tickers].sort_values(ascending=False)
+            value_high_tickers = set(value_sorted.head(value_high_n).index)
+            value_low_tickers = set(value_sorted.tail(value_low_n).index)
+            value_neutral_tickers = set(common_tickers) - value_high_tickers - value_low_tickers
 
-            # idem profitability buy
-            profitability_buy = set(profitability_scores.nlargest(high_threshold).index)
-            profitability_sell = set(profitability_scores.nsmallest(low_threshold).index)
+            # Étape 2: Pour chaque groupe Value, trier sur Momentum et Profitability
+            conditional_portfolios = {}
 
-            # Sélection conditionnelle
-            conditional_buy = [ticker for ticker in value_buy
-                               if ticker not in momentum_sell and ticker not in profitability_sell]
+            for value_group, value_tickers in [('high', value_high_tickers),
+                                               ('neutral', value_neutral_tickers),
+                                               ('low', value_low_tickers)]:
 
-            # Calcul des poids
-            if weighting_method == "market_cap":
-                current_mcap = market_cap_data.loc[current_date]
-                new_weights = PortfolioWeighter.market_cap_weight(conditional_buy, None, current_mcap)
-            elif weighting_method == "min_variance":
-                new_weights = PortfolioWeighter.minimum_variance_weight(
-                    conditional_buy, None, self.all_price_date, current_date, volatility_lookback_months)
-            else:  # Par défaut : equal_weight
-                new_weights = PortfolioWeighter.equal_weight(conditional_buy)
+                if len(value_tickers) == 0:
+                    continue
 
-            # Appliquer le volatility scaling si demandé
-            if volatility_scaling:
-                new_weights = PortfolioWeighter.volatility_scaling_weight(
-                    new_weights,self.all_price_date, current_date,
-                    target_volatility, volatility_lookback_months
-                )
+                value_tickers_list = list(value_tickers)
+
+                # Tri sur Momentum conditionnel au groupe Value
+                momentum_subset = momentum_scores[value_tickers_list]
+                momentum_high_n = max(1, int(len(value_tickers_list) * 0.3))
+                momentum_low_n = max(1, int(len(value_tickers_list) * 0.3))
+
+                momentum_sorted = momentum_subset.sort_values(ascending=False)
+                momentum_high = set(momentum_sorted.head(momentum_high_n).index)
+                momentum_low = set(momentum_sorted.tail(momentum_low_n).index)
+                momentum_neutral = set(value_tickers_list) - momentum_high - momentum_low
+
+                # Tri sur Profitability conditionnel au groupe Value
+                profitability_subset = profitability_scores[value_tickers_list]
+                profitability_high_n = max(1, int(len(value_tickers_list) * 0.3))
+                profitability_low_n = max(1, int(len(value_tickers_list) * 0.3))
+
+                profitability_sorted = profitability_subset.sort_values(ascending=False)
+                profitability_high = set(profitability_sorted.head(profitability_high_n).index)
+                profitability_low = set(profitability_sorted.tail(profitability_low_n).index)
+                profitability_neutral = set(value_tickers_list) - profitability_high - profitability_low
+
+                # Étape 3: Construction des portfolios conditionnels
+                for mom_group, mom_tickers in [('high', momentum_high), ('neutral', momentum_neutral),
+                                               ('low', momentum_low)]:
+                    for prof_group, prof_tickers in [('high', profitability_high), ('neutral', profitability_neutral),
+                                                     ('low', profitability_low)]:
+
+                        # Intersection des trois groupes
+                        intersection_tickers = list(value_tickers & mom_tickers & prof_tickers)
+
+                        if len(intersection_tickers) > 0:
+                            portfolio_name = f"{value_group}_{mom_group}_{prof_group}"
+                            conditional_portfolios[portfolio_name] = intersection_tickers
+
+            # Étape 4: Logique d'éligibilité
+            # Pour être éligible au "buy list": doit être value_high ET pas momentum_low ET pas profitability_low
+            buy_eligible = []
+            for portfolio_name, tickers in conditional_portfolios.items():
+                value_group, mom_group, prof_group = portfolio_name.split('_')
+
+                # Logique buy: Value high + pas momentum low + pas profitability low
+                if (value_group == 'high' and
+                        mom_group != 'low' and
+                        prof_group != 'low'):
+                    buy_eligible.extend(tickers)
+
+            # Logique sell (pour long/short, mais ici on ne l'utilise pas pour long-only)
+            sell_eligible = []
+            for portfolio_name, tickers in conditional_portfolios.items():
+                value_group, mom_group, prof_group = portfolio_name.split('_')
+
+                # Logique sell: Value low + pas momentum high + pas profitability high
+                if (value_group == 'low' and
+                        mom_group != 'high' and
+                        prof_group != 'high'):
+                    sell_eligible.extend(tickers)
+
+            # Étape 5: Construction finale du portefeuille long-only
+            final_tickers = list(set(buy_eligible))  # Éliminer les doublons
+
+            if len(final_tickers) == 0:
+                new_weights = pd.Series(0.0, index=self.price_data.columns)
+            else:
+                # Calcul des poids selon la méthode choisie
+                if weighting_method == "market_cap" and market_cap_data is not None:
+                    current_mcap = market_cap_data.loc[current_date]
+                    new_weights = PortfolioWeighter.market_cap_weight(final_tickers, None, current_mcap)
+                elif weighting_method == "min_variance":
+                    new_weights = PortfolioWeighter.minimum_variance_weight(
+                        final_tickers, None, self.all_price_date, current_date, volatility_lookback_months)
+                else:  # equal_weight
+                    new_weights = PortfolioWeighter.equal_weight(final_tickers)
+
+                # Appliquer le volatility scaling si demandé
+                if volatility_scaling:
+                    new_weights = PortfolioWeighter.volatility_scaling_weight(
+                        new_weights, self.all_price_date, current_date,
+                        target_volatility, volatility_lookback_months
+                    )
 
             portfolio_weights[current_date] = new_weights
             previous_weights = new_weights

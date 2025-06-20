@@ -5,7 +5,7 @@ import os
 
 
 class PortfolioAnalysis:
-    def __init__(self, returns, risk_free_rate=0.0, strategy_params=None):
+    def __init__(self, returns, risk_free_rate=0.0, strategy_params=None, weights_df=None):
         """
         Initialise l'analyse du portefeuille.
 
@@ -13,10 +13,35 @@ class PortfolioAnalysis:
             returns: Série Pandas de rendements
             risk_free_rate: Taux sans risque annualisé (défaut: 0.0)
             strategy_params: Dictionnaire contenant les paramètres de la stratégie
+            weights_df: DataFrame des poids du portefeuille pour calculer le nombre de stocks
         """
         self.returns = returns
         self.risk_free_rate = risk_free_rate
         self.strategy_params = strategy_params or {}
+        self.weights_df = weights_df
+
+    def _calculate_stock_count_stats(self):
+        """
+        Calcule les statistiques sur le nombre de stocks dans le portefeuille.
+
+        Returns:
+            dict: Statistiques sur le nombre de stocks
+        """
+        if self.weights_df is None:
+            return {
+                'avg_stock_count': 'N/A',
+                'min_stock_count': 'N/A',
+                'max_stock_count': 'N/A'
+            }
+
+        # Compter le nombre de stocks avec poids > 0 à chaque date
+        stock_counts = (self.weights_df > 0).sum(axis=1)
+
+        return {
+            'avg_stock_count': f"{stock_counts.mean():.1f}",
+            'min_stock_count': f"{stock_counts.min()}",
+            'max_stock_count': f"{stock_counts.max()}"
+        }
 
     def calculate_metrics(self, annualization_factor=12):
         """
@@ -55,13 +80,16 @@ class PortfolioAnalysis:
 
     def _generate_params_table_html(self):
         """
-        Génère un tableau HTML avec les paramètres de la stratégie.
+        Génère un tableau HTML avec les paramètres de la stratégie incluant le nombre de stocks.
 
         Returns:
             str: Code HTML du tableau des paramètres
         """
         if not self.strategy_params:
             return ""
+
+        # Calculer les statistiques de nombre de stocks
+        stock_stats = self._calculate_stock_count_stats()
 
         html = """
         <div style="margin: 20px 0;">
@@ -76,6 +104,7 @@ class PortfolioAnalysis:
                 <tbody>
         """
 
+        # Ajouter les paramètres existants
         for param, value in self.strategy_params.items():
             html += f"""
                     <tr>
@@ -84,6 +113,26 @@ class PortfolioAnalysis:
                     </tr>
             """
 
+        # Ajouter les statistiques de nombre de stocks
+        html += f"""
+                    <tr style="background-color: #f9f9f9;">
+                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Portfolio Composition</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Stock Count Statistics</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #ddd; padding: 8px;">Average Number of Stocks</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{stock_stats['avg_stock_count']}</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #ddd; padding: 8px;">Minimum Number of Stocks</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{stock_stats['min_stock_count']}</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #ddd; padding: 8px;">Maximum Number of Stocks</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">{stock_stats['max_stock_count']}</td>
+                    </tr>
+        """
+
         html += """
                 </tbody>
             </table>
@@ -91,6 +140,7 @@ class PortfolioAnalysis:
         """
 
         return html
+
 
     def generate_quantstats_report(self, serie, benchmark=None, output_file=None, title="Portfolio Analysis"):
         from quantstats import reports
@@ -111,6 +161,7 @@ class PortfolioAnalysis:
             benchmark.index = pd.to_datetime(benchmark.index)
         except:
             benchmark = None
+        # S'assurer que l'index est de type datetime
         if not isinstance(serie.index, pd.DatetimeIndex):
             if isinstance(serie.index, pd.RangeIndex):
                 start_date = pd.Timestamp.now() - pd.DateOffset(months=len(serie))
@@ -151,7 +202,7 @@ class PortfolioAnalysis:
             )
 
         # Ajouter le tableau des paramètres au rapport HTML
-        if self.strategy_params:
+        if self.strategy_params or self.weights_df is not None:
             self._inject_params_table(output_file)
 
         print(f"Rapport QuantStats généré: {output_file}")
